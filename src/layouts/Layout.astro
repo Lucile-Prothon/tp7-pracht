@@ -3,15 +3,21 @@ import "../styles/global.css";
 ---
 
 <!doctype html>
-<html lang="en">
+<html lang="fr">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="generator" content={Astro.generator} />
-    <title>Astro Basics</title>
+    <title>Graphique</title>
   </head>
   <body>
+    <nav>
+      <a href="/" class=" btn btn-accent m-3">Graphique des pinguins</a>
+      <a href="/leaflet" class="btn btn-accent m-3">Carte du monde</a>
+            <a href="/geo" class="btn btn-accent m-3">Carte des établissements </a>
+    </nav>
+
     <slot />
   </body>
 </html>
@@ -22,5 +28,10 @@ import "../styles/global.css";
     margin: 0;
     width: 100%;
     height: 100%;
+    font-family: Arial, sans-serif;
+  }
+
+  a {
+    text-decoration: none;
   }
 </style>
