@@ -1,2 +1,6 @@
 @import "tailwindcss";
 @plugin "daisyui";
+
+.plot-chart [aria-label="tip"] {
+  color: #000;
+}

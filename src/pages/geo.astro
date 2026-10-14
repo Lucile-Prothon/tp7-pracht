@@ -4,13 +4,38 @@ import PlotFigure from "../components/PlotFigure.astro";
 import departements from "../assets/departements.geojson.json";
 import populationMain from "../assets/populationMain.json";
 import Layout from "../layouts/Layout.astro";
-let selectedYear = 2015;
-let selectedSex = "Total";
-let selectedAge = "Total";
+
+type PopulationRow = {
+  Géographie: string;
+  Période: number;
+  Sexe: string;
+  Âge: string;
+  Valeur: number;
+};
+
+const population: PopulationRow[] = populationMain;
+const selectedYear = 2015;
+const selectedSex = "Total";
+const selectedAge = "Total";
+const listePeriode = [...new Set(population.map((d) => d.Période))].sort(
+  (a, b) => b - a
+);
+const listeSexe = [...new Set(population.map((d) => d.Sexe))];
+const listeAge = [...new Set(population.map((d) => d["Âge"]))];
+
+const getPopulation = (feature: { properties: { nom: string } }) =>
+  population.find(
+    (row) =>
+      row.Géographie === feature.properties.nom &&
+      row.Période === selectedYear &&
+      row.Sexe === selectedSex &&
+      row["Âge"] === selectedAge
+  );
+
 const optionPlot = {
   projection: {
-    type: "mercator", //utiliser une projection adaptée
-    domain: departements, // Domain pour centrer la carte sur la france
+    type: "mercator",
+    domain: departements,
   },
   color: {
     type: "quantile",
@@ -18,33 +43,17 @@ const optionPlot = {
     scheme: "Greens",
     label: "Population en centaine de milliers",
     legend: true,
-    transform: (d) => Math.round(d / 100000),
+    transform: (value: number) => Math.round(value / 100000),
   },
   marks: [
     Plot.geo(departements, {
-      fill: (d) => {
-        const deptName = d.properties.nom; //Nom du département dans le geoJson
-        const popData = populationMain.find(
-          (p) =>
-            p.Géographie === deptName &&
-            p.Période === selectedYear &&
-            p.Sexe === selectedSex &&
-            p["Âge"] === selectedAge
-        ); //trouver les données correspondantes
-        return popData.Valeur; //Coloriser en fonction de la valeur
-      },
+      fill: (feature: { properties: { nom: string } }) =>
+        getPopulation(feature)?.Valeur ?? null,
       stroke: "#999",
-      title: (d) => {
-        const deptName = d.properties.nom; //Nom du département dans le geoJson
-        const popData = populationMain.find(
-          (p) =>
-            p.Géographie === deptName &&
-            p.Période === selectedYear &&
-            p.Sexe === selectedSex &&
-            p["Âge"] === selectedAge
-        ); //trouver les données correspondantes
-        return `${deptName} : ${popData.Valeur}`; //Coloriser en fonction de la valeur
-      },
+      title: (feature: { properties: { nom: string } }) =>
+        `${feature.properties.nom} : ${
+          getPopulation(feature)?.Valeur ?? "Donnée indisponible"
+        }`,
       tip: true,
     }),
   ],
@@ -52,8 +61,162 @@ const optionPlot = {
 ---
 <Layout>
   <h1 class="text-2xl font-bold m-4">Carte des établissements</h1>
-  <p class="m-4">Cette carte montre la population par département en France pour l'année {selectedYear}.</p>
-<div class="m-4">
+  <p class="m-4">
+    Cette carte montre la population par département en France pour l'année
+    <span id="year-label">{selectedYear}</span>.
+  </p>
+  <div class="m-4 flex flex-wrap gap-4">
+    <label class="flex items-center gap-2">
+      <span>Année</span>
+      <select id="periode" class="select select-bordered select-success">
+        {listePeriode.map((period) => (
+          <option value={period} selected={period === selectedYear}>{period}</option>
+        ))}
+      </select>
+    </label>
+    <label class="flex items-center gap-2">
+      <span>Sexe</span>
+      <select id="sexe" class="select select-bordered select-success">
+        {listeSexe.map((sex) => (
+          <option value={sex} selected={sex === selectedSex}>{sex}</option>
+        ))}
+      </select>
+    </label>
+    <label class="flex items-center gap-2">
+      <span>Âge</span>
+      <select id="age" class="select select-bordered select-success">
+        {listeAge.map((age) => (
+          <option value={age} selected={age === selectedAge}>{age}</option>
+        ))}
+      </select>
+    </label>
+  </div>
+  <div id="chart" class="plot-chart m-4">
     <PlotFigure options={optionPlot} />
-</div>
+  </div>
+
+  <script>
+    import * as Plot from "@observablehq/plot";
+    import departements from "../assets/departements.geojson.json";
+    import populationMain from "../assets/populationMain.json";
+
+    type PopulationRow = {
+      Géographie: string;
+      Période: number;
+      Sexe: string;
+      Âge: string;
+      Valeur: number;
+    };
+
+    const population = populationMain as PopulationRow[];
+    const chart = document.querySelector<HTMLDivElement>("#chart");
+    const periodSelect = document.querySelector<HTMLSelectElement>("#periode");
+    const sexSelect = document.querySelector<HTMLSelectElement>("#sexe");
+    const ageSelect = document.querySelector<HTMLSelectElement>("#age");
+
+    if (!chart || !periodSelect || !sexSelect || !ageSelect) {
+      throw new Error("Impossible d'initialiser les filtres de la carte.");
+    }
+
+    const setOptions = (
+      select: HTMLSelectElement,
+      values: (string | number)[],
+      selectedValue: string | number
+    ) => {
+      select.replaceChildren(
+        ...values.map((value) => new Option(String(value), String(value)))
+      );
+      select.value = String(selectedValue);
+    };
+
+    const updateChart = (changedFilter?: HTMLSelectElement) => {
+      let selectedYear = Number(periodSelect.value);
+      let selectedSex = sexSelect.value;
+      let selectedAge = ageSelect.value;
+
+      let yearRows = population.filter((row) => row.Période === selectedYear);
+      if (!yearRows.some((row) => row.Sexe === selectedSex)) {
+        if (changedFilter === sexSelect) {
+          const sexRows = population.filter((row) => row.Sexe === selectedSex);
+          selectedYear =
+            sexRows.find((row) => row["Âge"] === selectedAge)?.Période ??
+            sexRows[0]?.Période ??
+            selectedYear;
+          periodSelect.value = String(selectedYear);
+          yearRows = population.filter((row) => row.Période === selectedYear);
+        } else {
+          selectedSex =
+            yearRows.find((row) => row.Sexe === "Total")?.Sexe ??
+            yearRows[0]?.Sexe ??
+            selectedSex;
+          sexSelect.value = selectedSex;
+        }
+      }
+
+      const sexRows = yearRows.filter((row) => row.Sexe === selectedSex);
+      const availableAges = [...new Set(sexRows.map((row) => row["Âge"]))];
+      if (!availableAges.includes(selectedAge)) {
+        selectedAge = availableAges.includes("Total")
+          ? "Total"
+          : availableAges[0] ?? selectedAge;
+        ageSelect.value = selectedAge;
+      }
+
+      setOptions(
+        periodSelect,
+        [...new Set(population.map((row) => row.Période))].sort((a, b) => b - a),
+        selectedYear
+      );
+      setOptions(
+        sexSelect,
+        [...new Set(yearRows.map((row) => row.Sexe))],
+        selectedSex
+      );
+      setOptions(ageSelect, availableAges, selectedAge);
+
+      const getPopulation = (feature: { properties: { nom: string } }) =>
+        population.find(
+          (row) =>
+            row.Géographie === feature.properties.nom &&
+            row.Période === selectedYear &&
+            row.Sexe === selectedSex &&
+            row["Âge"] === selectedAge
+        );
+
+      const plot = Plot.plot({
+        projection: { type: "mercator", domain: departements },
+        color: {
+          type: "quantile",
+          n: 8,
+          scheme: "Greens",
+          label: "Population en centaine de milliers",
+          legend: true,
+          transform: (value: number) => Math.round(value / 100000),
+        },
+        marks: [
+          Plot.geo(departements, {
+            fill: (feature: { properties: { nom: string } }) =>
+              getPopulation(feature)?.Valeur ?? null,
+            stroke: "#999",
+            title: (feature: { properties: { nom: string } }) =>
+              `${feature.properties.nom} : ${
+                getPopulation(feature)?.Valeur ?? "Donnée indisponible"
+              }`,
+            tip: true,
+          }),
+        ],
+      });
+
+      chart.replaceChildren(plot);
+      const yearLabel = document.querySelector("#year-label");
+      if (!yearLabel) {
+        throw new Error("Élément d'affichage de l'année introuvable.");
+      }
+      yearLabel.textContent = String(selectedYear);
+    };
+
+    periodSelect.addEventListener("change", () => updateChart(periodSelect));
+    sexSelect.addEventListener("change", () => updateChart(sexSelect));
+    ageSelect.addEventListener("change", () => updateChart(ageSelect));
+  </script>
 </Layout>
